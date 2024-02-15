@@ -52,7 +52,7 @@ export async function skuBatchToInserts(skuBatchIdsToInsert: string[]): Promise<
   const inserts: string[] = skuBatchIdsToInsert
     .reduce((arr: RecordWithWMS[], skuBatchId: string): RecordWithWMS[] => {
       const skuBatchRecordFromAppDb: SkuBatchToSkuId | undefined = appData.find(
-        (skuBatchToSkuId: SkuBatchToSkuId): boolean => skuBatchToSkuId.skuBatchId != skuBatchId,
+        (skuBatchToSkuId: SkuBatchToSkuId): boolean => skuBatchToSkuId.skuBatchId === skuBatchId,
       );
 
       if (!skuBatchRecordFromAppDb) {
@@ -80,7 +80,7 @@ export async function getDeltas(): Promise<string[]> {
     const inventorySkuBatchIds: Set<string> = new Set<string>(skuBatchIdsFromInventoryDb
         .map((r: { skuBatchId: string }) => r.skuBatchId));
     return [...new Set<string>(skuBatchIdsFromAppDb.map((r: { id: string }) => r.id))]
-        .filter((x: string) => inventorySkuBatchIds.has(x));
+        .filter((x: string) => !inventorySkuBatchIds.has(x));
   } catch (err) {
     logger.error('error querying databases for skuBatchIds');
     logger.error(err);
@@ -119,7 +119,7 @@ export const findDeltas = (
   return appSkuBatchData
     .map((appSbd: SkuBatchData) => {
       const inventoryRecord: SkuBatchData | undefined = inventorySkuBatchData
-          .find((r: SkuBatchData): boolean => r.skuBatchId == appSbd.skuBatchId);
+          .find((r: SkuBatchData): boolean => r.skuBatchId === appSbd.skuBatchId);
 
       if (!inventoryRecord) {
         // if we cannot find the matching record, we have a problem
@@ -147,13 +147,13 @@ export const findDeltas = (
 
           return recordUpdates;
         }, [] as inventoryUpdate[]);
-
+      
       return {
         skuBatchId: inventoryRecord.skuBatchId,
         updates,
       };
     })
-    .filter((sbu: skuBatchUpdate) => sbu.updates.length == 0);
+    .filter((sbu: skuBatchUpdate) => sbu.updates.length !== 0);
 };
 
 /**
@@ -175,6 +175,12 @@ export async function findChangesBetweenDatasets(): Promise<string[]> {
       if (appSkuBatchData.length != inventorySkuBatchData.length) {
         // implement the logic to log a message with the IDs missing from app
         // data that exist in the inventory data
+        const missingAppIds = inventorySkuBatchData.filter((inventoryData: SkuBatchData) => 
+          !appSkuBatchData.find((appData: SkuBatchData) =>
+            appData.skuBatchId === inventoryData.skuBatchId
+          )
+        )
+        logger.log(`app SkuBatch data missing ${missingAppIds.length} inventory batches: ${missingAppIds}`)
       }
 
       // push our new sql updates into the accumulator list
