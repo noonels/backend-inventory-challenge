@@ -1,11 +1,8 @@
 import axios, { AxiosResponse } from "axios";
 import path from "path";
-import { appData } from "./db/data";
+import { appData, warehouseData } from "./db/data";
 import { InventoryDto } from "./dto/inventory.dto";
-import {
-  SkuBatchToSkuId,
-  skuBatchUpdate,
-} from "./interfaces.util";
+import { RecordWithWMS, SkuBatchToSkuId, WMSWarehouseMeta, skuBatchUpdate } from "./interfaces.util";
 
 const logger = console;
 
@@ -28,12 +25,27 @@ export async function insertInventoryBatch(
       if (!batch) {
         throw new Error(`no record found for skuBatchId ${id}`);
       }
-      return batch;
-    })
+      // return warehouseData.map(
+      //   (warehouse: WMSWarehouseMeta): RecordWithWMS => ({
+      //     skuBatchId: batch.skuBatchId,
+      //     skuId: batch.skuId,
+      //     wmsId: batch.wmsId,
+      //     quantityPerUnitOfMeasure:
+      //       batch.quantityPerUnitOfMeasure ?? 1,
+      //     isArchived: batch.isArchived,
+      //     isDeleted: batch.isDeleted,
+      //     warehouseId: warehouse.warehouseId,
+      //   })
+      // );
+      return {
+        skuBatchId: batch.skuBatchId,
+        skuId: batch.skuId,
+      } as InventoryDto;
+    }).flat()
     .forEach(async (r: InventoryDto) => {
       try {
         await axios.post(
-          path.join(apiBase, r.warehouseId ? "inventory" : "inventory-aggregate"),
+          apiBase + "/inventory", //r.warehouseId ? "inventory" : "inventory-aggregate",
           JSON.stringify(r)
         );
       } catch (err) {
@@ -58,17 +70,23 @@ export async function updateInventoryBatch(
 
   inventoryUpdates
     .map((update: skuBatchUpdate) => {
-      const batch = appData.find((r: SkuBatchToSkuId) => r.skuBatchId === update.skuBatchId);
+      const batch = appData.find(
+        (r: SkuBatchToSkuId) => r.skuBatchId === update.skuBatchId
+      );
       if (!batch) {
         throw new Error(`no record found for skuBatchId ${update.skuBatchId}`);
       }
-      return batch;
+      return {
+        skuBatchId: batch.skuBatchId,
+        skuId: batch.skuId,
+        updates: update.updates,
+      } as InventoryDto;
     })
-    .forEach(async (r: InventoryDto) => {
+    .forEach(async (u: InventoryDto) => {
       try {
         await axios.post(
-          path.join(apiBase, "inventory-aggregate"), // we will never have a warehouseId, since skuBatchUpdates don't have them
-          JSON.stringify(r) //? Matt: should the updates be included? My gut says yes, but the spec doesn't mention them
+          apiBase + "/inventory-aggregate", // we will never have a warehouseId, since skuBatchUpdates don't have them
+          JSON.stringify(u) //? Matt: should the updates be included? My gut says yes, but the spec doesn't mention them
         );
       } catch (err) {
         logger.error(err);
