@@ -184,14 +184,11 @@ export async function findDatasetDeltas(): Promise<skuBatchUpdate[]> {
 
       // if we have a count mismatch, something is wrong, and we should log out a warning
       if (appSkuBatchData.length != inventorySkuBatchData.length) {
-        // implement the logic to log a message with the IDs missing from app
-        // data that exist in the inventory data
-        const missingAppIds = inventorySkuBatchData.filter((inventoryData: SkuBatchData) => 
-          !appSkuBatchData.find((appData: SkuBatchData) =>
-            appData.skuBatchId === inventoryData.skuBatchId
-          )
-        )
-        logger.log(`app SkuBatch data missing ${missingAppIds.length} inventory batches: ${missingAppIds}`)
+        const appBatches: Set<string> = new Set(appSkuBatchData.map((sbd: SkuBatchData) => sbd.skuBatchId));
+        const missingFromApp: string[] = inventorySkuBatchData
+          .map((sbd: SkuBatchData) => sbd.skuBatchId)
+          .filter((id: string) => !appBatches.has(id));
+        logger.log(`app SkuBatch data missing ${missingFromApp.length} inventory batches: ${missingFromApp.join(', ')}`);
       }
 
       // push our new sql updates into the accumulator list
