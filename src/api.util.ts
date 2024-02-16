@@ -1,8 +1,7 @@
-import axios, { AxiosResponse } from "axios";
-import { appData, warehouseData } from "./db/data";
+import axios from "axios";
+import { appData } from "./db/data";
 import { InventoryDto } from "./dto/inventory.dto";
 import {
-  RecordWithWMS,
   SkuBatchToSkuId,
   skuBatchUpdate,
 } from "./interfaces.util";
