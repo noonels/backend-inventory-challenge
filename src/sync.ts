@@ -20,7 +20,7 @@ import {
     queryExec,
     formatSqlValue,
 } from "./db/sql.util";
-import { insertInventoryBatch, updateInventoryBatch } from './api.util';
+import { inventoryApi } from './api.util';
 
 const logger = console;
 const FEATURE_FLAG_INV_API = process.env.FEATURE_FLAG_INVENTORY_API 
@@ -216,7 +216,7 @@ export async function copyMissingInventoryRecordsFromSkuBatch(): Promise<void | 
   logger.log(`copying new skuBatch records... [skuBatchCount=${skuBatchIdsToInsert.length}]`);
   try {
     if (FEATURE_FLAG_INV_API) {
-      insertInventoryBatch(skuBatchIdsToInsert);
+      inventoryApi.insertInventoryBatch(skuBatchIdsToInsert);
     } else {
       const inserts = await skuBatchToInserts(skuBatchIdsToInsert);
       await queryExec({}, inserts);
@@ -239,7 +239,7 @@ export async function updateInventoryDeltasFromSkuBatch(): Promise<void> {
   try {
     if (FEATURE_FLAG_INV_API) {
       const deltas: skuBatchUpdate[] = await findDatasetDeltas();
-      await updateInventoryBatch(deltas);
+      await inventoryApi.updateInventoryBatch(deltas);
     } else {
       const sqlUpdates: string[] = await findChangesBetweenDatasets();
       await queryExec({}, sqlUpdates);

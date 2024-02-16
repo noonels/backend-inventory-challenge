@@ -1,7 +1,6 @@
 import axios from "axios";
-import path from "path";
-import { insertInventoryBatch, updateInventoryBatch } from "./api.util";
-import { skuBatchUpdate, SkuBatchToSkuId } from "./interfaces.util";
+import { InventoryApi } from "./api.util";
+import { skuBatchUpdate } from "./interfaces.util";
 import { InventoryDto } from "./dto/inventory.dto";
 
 jest.mock("axios");
@@ -9,22 +8,19 @@ jest.mock("axios");
 describe("insertInventoryBatch", () => {
   const mockApiBase = "http://example.com/api";
   const mockIdsToInsert: string[] = ["sku-batch-id-1", "sku-batch-id-2"];
-
-  beforeEach(() => {
-    process.env.INVENTORY_API_BASE = mockApiBase;
-  });
+  const inventoryApi = new InventoryApi(mockApiBase);
 
   afterEach(() => {
     jest.clearAllMocks();
-    delete process.env.INVENTORY_API_BASE;
   });
 
   it('should throw an error if "INVENTORY_API_BASE" is missing from environment', async () => {
     delete process.env.INVENTORY_API_BASE;
+    const inventoryApi = new InventoryApi();
 
-    await expect(insertInventoryBatch(mockIdsToInsert)).rejects.toThrow(
-      '"INVENTORY_API_BASE" missing from environment'
-    );
+    await expect(
+      inventoryApi.insertInventoryBatch(mockIdsToInsert)
+    ).rejects.toThrow('"INVENTORY_API_BASE" missing from environment');
   });
 
   it("should make API requests to insert inventory", async () => {
@@ -41,7 +37,7 @@ describe("insertInventoryBatch", () => {
     // Mock the axios.post method to return a resolved promise
     (axios.post as jest.Mock).mockResolvedValueOnce({});
 
-    await insertInventoryBatch(mockIdsToInsert);
+    await inventoryApi.insertInventoryBatch(mockIdsToInsert);
 
     expect(axios.post).toHaveBeenCalledTimes(mockIdsToInsert.length);
     expect(axios.post).toHaveBeenCalledWith(
@@ -57,14 +53,15 @@ describe("insertInventoryBatch", () => {
   it("should throw an error if no record is found for a skuBatchId", async () => {
     const mockInvalidIdsToInsert: string[] = ["sku-batch-id-fake"];
 
-    await expect(insertInventoryBatch(mockInvalidIdsToInsert)).rejects.toThrow(
-      "no record found for skuBatchId sku-batch-id-fake"
-    );
+    await expect(
+      inventoryApi.insertInventoryBatch(mockInvalidIdsToInsert)
+    ).rejects.toThrow("no record found for skuBatchId sku-batch-id-fake");
   });
 });
 
 describe("updateInventoryBatch", () => {
   const mockApiBase = "http://example.com/api";
+  const inventoryApi = new InventoryApi(mockApiBase);
   const mockInventoryUpdates: skuBatchUpdate[] = [
     {
       skuBatchId: "sku-batch-id-1",
@@ -82,19 +79,15 @@ describe("updateInventoryBatch", () => {
     // Add more mock inventory updates as needed
   ];
 
-  beforeEach(() => {
-    process.env.INVENTORY_API_BASE = mockApiBase;
-  });
-
   afterEach(() => {
     jest.clearAllMocks();
-    delete process.env.INVENTORY_API_BASE;
   });
 
   it('should throw an error if "INVENTORY_API_BASE" is missing from environment', async () => {
     delete process.env.INVENTORY_API_BASE;
+    const inventoryApi = new InventoryApi();
 
-    await expect(updateInventoryBatch(mockInventoryUpdates)).rejects.toThrow(
+    await expect(inventoryApi.updateInventoryBatch(mockInventoryUpdates)).rejects.toThrow(
       '"INVENTORY_API_BASE" missing from environment'
     );
   });
@@ -118,7 +111,7 @@ describe("updateInventoryBatch", () => {
     // Mock the axios.post method to return a resolved promise
     (axios.post as jest.Mock).mockResolvedValueOnce({});
 
-    await updateInventoryBatch(mockInventoryUpdates);
+    await inventoryApi.updateInventoryBatch(mockInventoryUpdates);
 
     expect(axios.post).toHaveBeenCalledTimes(mockInventoryUpdates.length);
     expect(axios.post).toHaveBeenCalledWith(
@@ -145,7 +138,7 @@ describe("updateInventoryBatch", () => {
     ];
 
     await expect(
-      updateInventoryBatch(mockInvalidInventoryUpdates)
+      inventoryApi.updateInventoryBatch(mockInvalidInventoryUpdates)
     ).rejects.toThrow("no record found for skuBatchId 2");
   });
 
@@ -155,7 +148,7 @@ describe("updateInventoryBatch", () => {
     // Mock the axios.post method to return a rejected promise
     (axios.post as jest.Mock).mockRejectedValueOnce(mockError);
 
-    await expect(updateInventoryBatch(mockInventoryUpdates)).rejects.toThrow(
+    await expect(inventoryApi.updateInventoryBatch(mockInventoryUpdates)).rejects.toThrow(
       mockError
     );
   });
