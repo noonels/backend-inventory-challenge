@@ -3,9 +3,7 @@ import path from "path";
 import { appData, warehouseData } from "./db/data";
 import { InventoryDto } from "./dto/inventory.dto";
 import {
-  RecordWithWMS,
   SkuBatchToSkuId,
-  WMSWarehouseMeta,
   skuBatchUpdate,
 } from "./interfaces.util";
 

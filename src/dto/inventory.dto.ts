@@ -1,6 +1,6 @@
 import { inventoryUpdate } from 'src/interfaces.util';
 
-export interface InventoryDto {
+export type InventoryDto = {
   skuBatchId: string;
   skuId: string;
   warehouseId?: string;
