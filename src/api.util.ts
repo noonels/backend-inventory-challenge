@@ -1,22 +1,15 @@
 import axios, { AxiosResponse } from "axios";
-import path from "path";
 import { appData, warehouseData } from "./db/data";
 import { InventoryDto } from "./dto/inventory.dto";
 import {
+  RecordWithWMS,
   SkuBatchToSkuId,
   skuBatchUpdate,
 } from "./interfaces.util";
 
 const logger = console;
 export class InventoryApi {
-  constructor(private apiBase?: string) {
-    // use the apiBase if it's provided, otherwise use the environment variable
-    if (!apiBase && !process.env.Inventory_API_BASE) {
-      throw new Error('"INVENTORY_API_BASE" missing from environment');
-    }
-    // || should be unneeded, but the compiler doesn't see that the env var cannot be undefined at this point.
-    this.apiBase ??= process.env.INVENTORY_API_BASE || "";
-  }
+  constructor(private apiBase: string) { }
 
 
   /**
@@ -24,35 +17,31 @@ export class InventoryApi {
    * @param idsToInsert
    * @returns A response from the inventory API
    */
-  async insertInventoryBatch(idsToInsert: string[]): Promise<void> {
+  async insertInventoryBatch(idsToInsert: string[], warehouseId?: string): Promise<void> {
     idsToInsert
       .map((id: string) => {
         const batch = appData.find((r: SkuBatchToSkuId) => r.skuBatchId === id);
         if (!batch) {
           throw new Error(`no record found for skuBatchId ${id}`);
         }
-        // return warehouseData.map(
-        //   (warehouse: WMSWarehouseMeta): RecordWithWMS => ({
-        //     skuBatchId: batch.skuBatchId,
-        //     skuId: batch.skuId,
-        //     wmsId: batch.wmsId,
-        //     quantityPerUnitOfMeasure:
-        //       batch.quantityPerUnitOfMeasure ?? 1,
-        //     isArchived: batch.isArchived,
-        //     isDeleted: batch.isDeleted,
-        //     warehouseId: warehouse.warehouseId,
-        //   })
-        // );
         return {
           skuBatchId: batch.skuBatchId,
           skuId: batch.skuId,
+          ...(warehouseId ? { warehouseId } : {}),
+          record: {
+            wmsId: batch.wmsId,
+            quantityPerUnitOfMeasure: batch.quantityPerUnitOfMeasure ?? 1,
+            isArchived: batch.isArchived,
+            isDeleted: batch.isDeleted,
+          },
         } as InventoryDto;
       })
       .flat()
       .forEach(async (r: InventoryDto) => {
+        const endpoint = "warehouseId" in r ? "inventory" : "inventory-aggregate";
         try {
           await axios.post(
-            this.apiBase + "/inventory", //r.warehouseId ? "inventory" : "inventory-aggregate",
+            this.apiBase + "/" + endpoint,
             JSON.stringify(r)
           );
         } catch (err) {
@@ -68,7 +57,8 @@ export class InventoryApi {
    * @returns A response from the inventory API
    */
   async updateInventoryBatch(
-    inventoryUpdates: skuBatchUpdate[]
+    inventoryUpdates: skuBatchUpdate[],
+    warehouseId?: string,
   ): Promise<void> {
     inventoryUpdates
       .map((update: skuBatchUpdate) => {
@@ -83,14 +73,16 @@ export class InventoryApi {
         return {
           skuBatchId: batch.skuBatchId,
           skuId: batch.skuId,
+          ...(warehouseId ? { warehouseId } : {}),
           updates: update.updates,
         } as InventoryDto;
       })
-      .forEach(async (u: InventoryDto) => {
+      .forEach(async (body: InventoryDto) => {
+        const endpoint = "warehouseId" in body ? "inventory" : "inventory-aggregate";
         try {
           await axios.post(
-            this.apiBase + "/inventory-aggregate", // we will never have a warehouseId, since skuBatchUpdates don't have them
-            JSON.stringify(u) //? Matt: should the updates be included? My gut says yes, but the spec doesn't mention them
+            this.apiBase + "/" + endpoint,
+            JSON.stringify(body)
           );
         } catch (err) {
           logger.error(err);
@@ -100,4 +92,4 @@ export class InventoryApi {
   }
 }
 
-export const inventoryApi = new InventoryApi();
+export const inventoryApi = new InventoryApi(process.env.INVENTORY_API_BASE || "");
