@@ -20,8 +20,10 @@ import {
     queryExec,
     formatSqlValue,
 } from "./db/sql.util";
+import { inventoryApi } from './api.util';
 
 const logger = console;
+const FEATURE_FLAG_INV_API = process.env.FEATURE_FLAG_INVENTORY_API 
 
 /**
  * Create a list of records for a skuBatch record that maps skuBatchId + warehouseId
@@ -52,7 +54,7 @@ export async function skuBatchToInserts(skuBatchIdsToInsert: string[]): Promise<
   const inserts: string[] = skuBatchIdsToInsert
     .reduce((arr: RecordWithWMS[], skuBatchId: string): RecordWithWMS[] => {
       const skuBatchRecordFromAppDb: SkuBatchToSkuId | undefined = appData.find(
-        (skuBatchToSkuId: SkuBatchToSkuId): boolean => skuBatchToSkuId.skuBatchId != skuBatchId,
+        (skuBatchToSkuId: SkuBatchToSkuId): boolean => skuBatchToSkuId.skuBatchId === skuBatchId,
       );
 
       if (!skuBatchRecordFromAppDb) {
@@ -80,7 +82,7 @@ export async function getDeltas(): Promise<string[]> {
     const inventorySkuBatchIds: Set<string> = new Set<string>(skuBatchIdsFromInventoryDb
         .map((r: { skuBatchId: string }) => r.skuBatchId));
     return [...new Set<string>(skuBatchIdsFromAppDb.map((r: { id: string }) => r.id))]
-        .filter((x: string) => inventorySkuBatchIds.has(x));
+        .filter((x: string) => !inventorySkuBatchIds.has(x));
   } catch (err) {
     logger.error('error querying databases for skuBatchIds');
     logger.error(err);
@@ -119,7 +121,7 @@ export const findDeltas = (
   return appSkuBatchData
     .map((appSbd: SkuBatchData) => {
       const inventoryRecord: SkuBatchData | undefined = inventorySkuBatchData
-          .find((r: SkuBatchData): boolean => r.skuBatchId == appSbd.skuBatchId);
+          .find((r: SkuBatchData): boolean => r.skuBatchId === appSbd.skuBatchId);
 
       if (!inventoryRecord) {
         // if we cannot find the matching record, we have a problem
@@ -147,24 +149,33 @@ export const findDeltas = (
 
           return recordUpdates;
         }, [] as inventoryUpdate[]);
-
+      
       return {
         skuBatchId: inventoryRecord.skuBatchId,
         updates,
       };
     })
-    .filter((sbu: skuBatchUpdate) => sbu.updates.length == 0);
+    .filter((sbu: skuBatchUpdate) => sbu.updates.length !== 0);
 };
 
 /**
  * Finds changes in data between the app SkuBatch+Sku and inventory tables
+ * returns a list of SQL updates
  */
 export async function findChangesBetweenDatasets(): Promise<string[]> {
+  return (await findDatasetDeltas()).flatMap(makeUpdates);
+ }
+
+/**
+ * Finds changes in data between the app SkuBatch+Sku and inventory tables
+ * returns Promise<skuBatchUpdate[]>
+ */
+export async function findDatasetDeltas(): Promise<skuBatchUpdate[]> {
   logger.log('finding app SkuBatch data that has changed and <> the inventory data');
 
-  const updates: string[] = await [appSkuBatchData].reduce(
-    async (accumPromise: Promise<string[]>, inventorySkuBatchData: SkuBatchData[]) => {
-      const accum: string[] = await accumPromise;
+  const updates: skuBatchUpdate[] = await [appSkuBatchData].reduce(
+    async (accumPromise: Promise<skuBatchUpdate[]>, inventorySkuBatchData: SkuBatchData[]) => {
+      const accum: skuBatchUpdate[] = await accumPromise;
       const skuBatchIds: string[] = inventorySkuBatchData.map((sbd: SkuBatchData) => sbd.skuBatchId);
 
       logger.log(`querying Logistics.SkuBatch for data [skuBatchIdCount=${skuBatchIds.length}]`);
@@ -173,22 +184,24 @@ export async function findChangesBetweenDatasets(): Promise<string[]> {
 
       // if we have a count mismatch, something is wrong, and we should log out a warning
       if (appSkuBatchData.length != inventorySkuBatchData.length) {
-        // implement the logic to log a message with the IDs missing from app
-        // data that exist in the inventory data
+        const appBatches: Set<string> = new Set(appSkuBatchData.map((sbd: SkuBatchData) => sbd.skuBatchId));
+        const missingFromApp: string[] = inventorySkuBatchData
+          .map((sbd: SkuBatchData) => sbd.skuBatchId)
+          .filter((id: string) => !appBatches.has(id));
+        logger.log(`app SkuBatch data missing ${missingFromApp.length} inventory batches: ${missingFromApp.join(', ')}`);
       }
 
       // push our new sql updates into the accumulator list
-      const ds: string[] = findDeltas(appSkuBatchData, inventorySkuBatchData)
-          .flatMap((delta: skuBatchUpdate) => makeUpdates(delta));
+      const ds: skuBatchUpdate[] = findDeltas(appSkuBatchData, inventorySkuBatchData)
 
       accum.push(...ds);
       return accum;
     },
-    Promise.resolve([] as string[]),
+    Promise.resolve([] as skuBatchUpdate[]),
   );
 
   logger.log(`built updates [count=${updates.length}]`);
-
+  
   return updates;
 }
 
@@ -202,8 +215,12 @@ export async function copyMissingInventoryRecordsFromSkuBatch(): Promise<void | 
   const skuBatchIdsToInsert: string[] = await getDeltas();
   logger.log(`copying new skuBatch records... [skuBatchCount=${skuBatchIdsToInsert.length}]`);
   try {
-    const inserts = await skuBatchToInserts(skuBatchIdsToInsert);
-    await queryExec({}, inserts);
+    if (FEATURE_FLAG_INV_API) {
+      inventoryApi.insertInventoryBatch(skuBatchIdsToInsert);
+    } else {
+      const inserts = await skuBatchToInserts(skuBatchIdsToInsert);
+      await queryExec({}, inserts);
+    }
   } catch (err) {
     logger.error(err);
     throw err;
@@ -220,8 +237,13 @@ export async function updateInventoryDeltasFromSkuBatch(): Promise<void> {
   logger.log('updating inventory from deltas in "SkuBatch" data');
 
   try {
-    const sqlUpdates: string[] = await findChangesBetweenDatasets();
-    await queryExec({}, sqlUpdates);
+    if (FEATURE_FLAG_INV_API) {
+      const deltas: skuBatchUpdate[] = await findDatasetDeltas();
+      await inventoryApi.updateInventoryBatch(deltas);
+    } else {
+      const sqlUpdates: string[] = await findChangesBetweenDatasets();
+      await queryExec({}, sqlUpdates);
+    }
   } catch (err) {
     logger.error(err);
     throw err;

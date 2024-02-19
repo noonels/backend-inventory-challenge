@@ -18,7 +18,7 @@ npm test
 
 ## Project Details
 
-This is a NodeJS project that comes from one of our production services that is responsible 
+This is a NodeJS project that comes from one of our production services that is responsible
 for synchronizing data between two different Postgres databases. This service is responsible for finding
 deltas between the `app` database and the `inventory` database then creating proper representations in 
 the `inventory` database.
@@ -53,8 +53,8 @@ The entrypoint is at the very bottom of `sync.ts`, the function is named `sync`.
 # Tasks
 
 1. Find the bugs in the codebase and fix them
-2. Implement the requested functional in `./src/db/sql.util.ts` in `formatSqlValue`
-3. Implement the functional as requested in the comment on line 176 of `sync.ts` 
+2. Implement the requested functionality in `./src/db/sql.util.ts` in `formatSqlValue`
+3. Implement the functionality as requested in the comment on line 176 of `sync.ts` 
 4. Complete the commented out tests in `sync.spec.ts`
 5. Envision us now not making the inserts and updates directly to the `inventory` database. Implement the ability to make the necessary POST/PUT request to an API endpoint to create/update the inventory records (instead of making updates directly).
    * The fake API endpoint should be `https://local-inventory.nabis.dev/v1/`
