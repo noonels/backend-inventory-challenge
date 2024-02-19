@@ -35,7 +35,6 @@ export class InventoryApi {
           },
         } as InventoryDto;
       })
-      .flat()
       .forEach(async (r: InventoryDto) => {
         const endpoint = "warehouseId" in r ? "inventory" : "inventory-aggregate";
         try {
@@ -79,7 +78,7 @@ export class InventoryApi {
       .forEach(async (body: InventoryDto) => {
         const endpoint = "warehouseId" in body ? "inventory" : "inventory-aggregate";
         try {
-          await axios.post(
+          await axios.put(
             this.apiBase + "/" + endpoint,
             JSON.stringify(body)
           );

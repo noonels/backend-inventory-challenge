@@ -1,4 +1,4 @@
-import { RecordWithWMS, inventoryUpdate } from 'src/interfaces.util';
+import { inventoryUpdate } from 'src/interfaces.util';
 
 type InventoryInsertData = {
   record: {
